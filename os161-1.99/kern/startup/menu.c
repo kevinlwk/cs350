@@ -396,6 +396,19 @@ cmd_kheapstats(int nargs, char **args)
 	return 0;
 }
 
+static
+int
+cmd_dth(int nargs, char **args) {
+	(void)nargs;
+	(void)args;
+
+	// cat("hello");
+	dbflags = 0x0010;
+	// cat("goodbye");
+
+	return 0;
+}
+
 ////////////////////////////////////////
 //
 // Menus.
@@ -436,6 +449,7 @@ static const char *opsmenu[] = {
 	"[pwd]     Print current directory   ",
 	"[sync]    Sync filesystems          ",
 	"[panic]   Intentional panic         ",
+	"[dth]     Enable debugging          ",
 	"[q]       Quit and shut down        ",
 	NULL
 };
@@ -547,6 +561,7 @@ static struct {
 	{ "sync",	cmd_sync },
 	{ "panic",	cmd_panic },
 	{ "q",		cmd_quit },
+	{ "dth",	cmd_dth },
 	{ "exit",	cmd_quit },
 	{ "halt",	cmd_quit },
 
