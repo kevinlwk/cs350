@@ -21,8 +21,18 @@
 /*
  * replace this with declarations of any synchronization and other variables you need here
  */
-static struct semaphore *intersectionSem;
+// enum Direction{NORTH, EAST, SOUTH, WEST}; 
 
+volatile int numAllowed = 0; 
+volatile Direction direction = north;
+
+volatile int waitTimes[4] = {0, 0, 0, 0};
+
+int states[4] = {0, 0, 0, 0};
+struct cv *cvs[4];
+static struct lock *intersectionLock;
+
+bool isFirstCar = true;
 
 /* 
  * The simulation driver will call this function once before starting
@@ -36,11 +46,19 @@ intersection_sync_init(void)
 {
   /* replace this default implementation with your own implementation */
 
-  intersectionSem = sem_create("intersectionSem",1);
-  if (intersectionSem == NULL) {
-    panic("could not create intersection semaphore");
+  intersectionLock = lock_create("intersectionLock");
+  if (!intersectionLock) {
+    panic("could not create intersection intersectionLock");
   }
-  return;
+
+  cvs[0] = cv_create("north");
+  cvs[1] = cv_create("east");
+  cvs[2] = cv_create("south");
+  cvs[3] = cv_create("west");
+
+  for (int i = 0; i < 4; i++) {
+    if (!cvs[i]) panic("could not create cv");
+  }
 }
 
 /* 
@@ -54,10 +72,19 @@ void
 intersection_sync_cleanup(void)
 {
   /* replace this default implementation with your own implementation */
-  KASSERT(intersectionSem != NULL);
-  sem_destroy(intersectionSem);
+  KASSERT(intersectionLock != NULL);
+
+  lock_destroy(intersectionLock);
+  for (int i = 0; i < 4; i++) cv_destroy(cvs[i]);
 }
 
+// helper for intersection_before_entry
+bool check_other_directions(int index) {
+  for (int i = 0; i < 4; i++) {
+    if (i != index && states[i]) return true;
+  }
+  return false;
+}
 
 /*
  * The simulation driver will call this function each time a vehicle
@@ -76,10 +103,25 @@ void
 intersection_before_entry(Direction origin, Direction destination) 
 {
   /* replace this default implementation with your own implementation */
-  (void)origin;  /* avoid compiler complaint about unused parameter */
   (void)destination; /* avoid compiler complaint about unused parameter */
-  KASSERT(intersectionSem != NULL);
-  P(intersectionSem);
+  KASSERT(intersectionLock != NULL);
+
+  lock_acquire(intersectionLock);
+
+  if (isFirstCar) {
+    isFirstCar = false;
+    direction = origin;
+  }
+
+  while (check_other_directions(origin)) {
+    waitTimes[origin] += 1;
+    cv_wait(cvs[origin], intersectionLock);
+  }
+  waitTimes[origin] = 0;
+  states[origin]++;
+  numAllowed++;
+
+  lock_release(intersectionLock);
 }
 
 
@@ -97,9 +139,31 @@ intersection_before_entry(Direction origin, Direction destination)
 void
 intersection_after_exit(Direction origin, Direction destination) 
 {
-  /* replace this default implementation with your own implementation */
-  (void)origin;  /* avoid compiler complaint about unused parameter */
-  (void)destination; /* avoid compiler complaint about unused parameter */
-  KASSERT(intersectionSem != NULL);
-  V(intersectionSem);
+  KASSERT(intersectionLock != NULL && states[origin] > 0);
+  (void)destination;
+  lock_acquire(intersectionLock);
+
+  if (states[origin] == 0) {
+    int rightI = (origin + 1) % 4;
+    int oppositeI = (origin + 2) % 4;
+    int leftI = (origin + 3) % 4;
+    int right = waitTimes[rightI];
+    int opposite = waitTimes[oppositeI];
+    int left = waitTimes[leftI];
+ 
+    if (right >= opposite && right >= left) {
+      cv_broadcast(cvs[rightI], intersectionLock);
+    } else if (left >= right && left >= opposite) {
+      cv_broadcast(cvs[leftI], intersectionLock);
+    } else {
+      cv_broadcast(cvs[oppositeI], intersectionLock);
+    }
+  }
+
+  states[origin]--;
+  numAllowed--;
+  isFirstCar = check_other_directions(-1) && numAllowed == 0;
+
+  for (int i = 0; i < 4; i++) cv_broadcast(cvs[i], intersectionLock);
+  lock_release(intersectionLock);
 }
