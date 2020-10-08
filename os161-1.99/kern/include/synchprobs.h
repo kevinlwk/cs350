@@ -15,6 +15,7 @@ typedef enum Directions Direction;
 
 void intersection_sync_init(void);
 void intersection_sync_cleanup(void);
+bool check_other_directions(int index);
 void intersection_before_entry(Direction origin, Direction destination);
 void intersection_after_exit(Direction origin, Direction destination);
 
