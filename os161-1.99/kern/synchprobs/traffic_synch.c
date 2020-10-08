@@ -26,7 +26,7 @@
 volatile int numAllowed = 0; 
 volatile Direction direction = north;
 
-volatile int waitTimes[4] = {0, 0, 0, 0};
+volatile int waitingTimes[4] = {0, 0, 0, 0};
 
 int states[4] = {0, 0, 0, 0};
 struct cv *cvs[4];
@@ -114,10 +114,10 @@ intersection_before_entry(Direction origin, Direction destination)
   }
 
   while (check_other_directions(origin)) {
-    waitTimes[origin] += 1;
+    waitingTimes[origin] += 1;
     cv_wait(cvs[origin], intersectionLock);
   }
-  waitTimes[origin] = 0;
+  waitingTimes[origin] = 0;
   states[origin]++;
   numAllowed++;
 
@@ -147,9 +147,9 @@ intersection_after_exit(Direction origin, Direction destination)
     int rightI = (origin + 1) % 4;
     int oppositeI = (origin + 2) % 4;
     int leftI = (origin + 3) % 4;
-    int right = waitTimes[rightI];
-    int opposite = waitTimes[oppositeI];
-    int left = waitTimes[leftI];
+    int right = waitingTimes[rightI];
+    int opposite = waitingTimes[oppositeI];
+    int left = waitingTimes[leftI];
  
     if (right >= opposite && right >= left) {
       cv_broadcast(cvs[rightI], intersectionLock);
