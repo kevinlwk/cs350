@@ -50,6 +50,7 @@
 #include <vfs.h>
 #include <synch.h>
 #include <kern/fcntl.h>  
+#include "opt-A2.h"
 
 /*
  * The process for the kernel; this holds all the kernel-only threads.
@@ -69,6 +70,10 @@ static struct semaphore *proc_count_mutex;
 struct semaphore *no_proc_sem;   
 #endif  // UW
 
+#if OPT_A2
+static struct semaphore *pid_count_mutex;
+static volatile pid_t pid_count;
+#endif
 
 
 /*
@@ -102,6 +107,16 @@ proc_create(const char *name)
 #ifdef UW
 	proc->console = NULL;
 #endif // UW
+
+#if OPT_A2
+	proc->pid = 0;
+	proc->parent = NULL;
+	proc->children = array_create();
+	proc->cv = cv_create("please work");
+	proc->lk = lock_create("i have worked on this for like 5 days now");
+	proc->exitStatus = 0;
+	proc->alive = true;
+#endif
 
 	return proc;
 }
@@ -163,6 +178,12 @@ proc_destroy(struct proc *proc)
 	}
 #endif // UW
 
+#if OPT_A2
+  	DEBUG(DB_SYSCALL,"proc_destroy: (%d)\n", proc->pid);
+	cv_destroy(proc->cv);
+	lock_destroy(proc->lk);
+#endif
+
 	threadarray_cleanup(&proc->p_threads);
 	spinlock_cleanup(&proc->p_lock);
 
@@ -183,7 +204,6 @@ proc_destroy(struct proc *proc)
 	}
 	V(proc_count_mutex);
 #endif // UW
-	
 
 }
 
@@ -208,6 +228,12 @@ proc_bootstrap(void)
     panic("could not create no_proc_sem semaphore\n");
   }
 #endif // UW 
+
+#if OPT_A2
+  	DEBUG(DB_SYSCALL,"proc_bootstrap: (%d)\n", kproc->pid);
+	pid_count_mutex = sem_create("pid_count_mutex",1);
+	pid_count = 1;
+#endif
 }
 
 /*
@@ -270,6 +296,14 @@ proc_create_runprogram(const char *name)
 	proc_count++;
 	V(proc_count_mutex);
 #endif // UW
+
+#ifdef OPT_A2
+  	DEBUG(DB_SYSCALL,"proc_create_runprogram: (%d)\n", proc->pid);
+	P(pid_count_mutex);
+	proc->pid = pid_count;
+	pid_count++;
+	V(pid_count_mutex);
+#endif
 
 	return proc;
 }
