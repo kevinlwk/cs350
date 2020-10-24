@@ -136,8 +136,6 @@ sys_waitpid(pid_t pid,
 
 #if OPT_A2
 int sys_fork(struct trapframe *tf, pid_t *retval) {
-  struct trapframe *temp= kmalloc(sizeof(struct trapframe));
-  *temp = *tf;
 
   struct proc *child = proc_create_runprogram(curproc->p_name);
   KASSERT(child && child->pid);
@@ -158,6 +156,10 @@ int sys_fork(struct trapframe *tf, pid_t *retval) {
 
   array_add(curproc->children, child, NULL);
   // lock_release(curproc->lk);
+
+  struct trapframe *temp= kmalloc(sizeof(struct trapframe));
+  KASSERT(temp);
+  *temp = *tf;
 
   thread_fork(child->p_name, child, (void *) &enter_forked_process, temp, 15); 
 
