@@ -71,8 +71,8 @@ struct semaphore *no_proc_sem;
 #endif  // UW
 
 #if OPT_A2
-static struct semaphore *pid_count_mutex;
 static volatile pid_t pid_count;
+static struct semaphore *pid_count_mutex;
 #endif
 
 
@@ -179,7 +179,6 @@ proc_destroy(struct proc *proc)
 #endif // UW
 
 #if OPT_A2
-  	DEBUG(DB_SYSCALL,"proc_destroy: (%d)\n", proc->pid);
 	cv_destroy(proc->cv);
 	lock_destroy(proc->lk);
 #endif

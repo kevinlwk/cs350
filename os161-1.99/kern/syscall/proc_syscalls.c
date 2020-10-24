@@ -21,25 +21,29 @@ void sys__exit(int exitcode) {
   struct proc *p = curproc;
 
 #if OPT_A2 
-  curproc->alive = false;
-  cv_signal(curproc->cv, curproc->lk);
+  p->alive = false;
+  cv_signal(p->cv, p->lk);
 
+  lock_acquire(p->lk);
   bool alive = false;
-  int n = array_num(curproc->children);
-  for (int i = 0; i < n; i++) alive = ((struct proc *) array_get(curproc->children, i))->alive || alive;
+  int n = array_num(p->children);
+  for (int i = 0; i < n; i++) {
+    alive = ((struct proc *) array_get(p->children, i))->alive || alive;
+  }
+  lock_release(p->lk);
 
-  // lock_acquire(curproc->lk);
   if (!alive) {
+
     while (n > 0) {
-      proc_destroy(array_get(curproc->children, n - 1));
+      proc_destroy(array_get(p->children, n - 1));
       n--;
-      array_setsize(curproc->children, n);
+      array_setsize(p->children, n);
     }
 
-    array_destroy(curproc->children);
+    array_destroy(p->children);
+    // DEBUG(DB_SYSCALL, "successfully destroyed children");
   }
-  // lock_acquire(curproc->lk);
-  curproc->exitStatus = exitcode;
+  p->exitStatus = exitcode;
 #else
   exitcode = 0;
 #endif
@@ -81,7 +85,7 @@ void sys__exit(int exitcode) {
 int
 sys_getpid(pid_t *retval)
 {
-  DEBUG(DB_SYSCALL,"sys_getpid: (%d)\n", *retval);
+  // DEBUG(DB_SYSCALL,"sys_getpid: (%d)\n", *retval);
   /* for now, this is just a stub that always returns a PID of 1 */
   /* you need to fix this to make it work properly */
   #if OPT_A2
@@ -100,7 +104,7 @@ sys_waitpid(pid_t pid,
 	    int options,
 	    pid_t *retval)
 {
-  DEBUG(DB_SYSCALL,"sys_waitpid: (%d)\n", *retval);
+  // DEBUG(DB_SYSCALL,"sys_waitpid: (%d)\n", *retval);
   int exitstatus;
   int result;
 
@@ -110,16 +114,22 @@ sys_waitpid(pid_t pid,
 
   #if OPT_A2
 
-    int n = array_num(curproc->children);
+    struct proc *p = curproc;
+
+    lock_acquire(p->lk);
+    int n = array_num(p->children);
+
     for (int i = 0; i < n; i++) {
-      struct proc *child = array_get(curproc->children, i);
+      struct proc *child = array_get(p->children, i);
+
       if (child->pid == pid) {
-        lock_acquire(child->lk);
         while (child->alive) cv_wait(child->cv, child->lk);
-        lock_release(child->lk);
         exitstatus = _MKWAIT_EXIT(child->exitStatus);
+        proc_destroy(child);
       }
     }
+
+    lock_release(p->lk);
 
   #else
     exitstatus = 0;
@@ -146,7 +156,7 @@ int sys_fork(struct trapframe *tf, pid_t *retval) {
   // lock_acquire(curproc->lk);
   // as_copy(curproc->p_addrspace, &as);
   if (as_copy(curproc->p_addrspace, &as) != 0) {
-    // panic("address space copy failed");
+    return ENOMEM;
   }
   child->p_addrspace = as; 
   // lock_release(curproc->lk);

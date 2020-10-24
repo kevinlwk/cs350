@@ -60,15 +60,15 @@ struct proc {
 	/* VFS */
 	struct vnode *p_cwd;		/* current working directory */
 
-  #if OPT_A2
-	pid_t pid;
-	struct proc* parent;
-	struct cv* cv;
-	struct array *children;
-	struct lock *lk;
-	volatile int exitStatus;
-	volatile bool alive;
-	#endif /* OPT_A2 */
+    #if OPT_A2
+		pid_t pid;
+		struct proc* parent;
+		struct cv* cv;
+		struct array *children;
+		struct lock *lk;
+		volatile int exitStatus;
+		volatile bool alive;
+    #endif
 
 #ifdef UW
   /* a vnode to refer to the console device */
