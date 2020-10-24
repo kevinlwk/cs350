@@ -22,9 +22,9 @@ void sys__exit(int exitcode) {
 
 #if OPT_A2 
   p->alive = false;
-  cv_signal(p->cv, p->lk);
 
   lock_acquire(p->lk);
+  cv_signal(p->cv, p->lk);
   bool alive = false;
   int n = array_num(p->children);
   for (int i = 0; i < n; i++) {
@@ -34,6 +34,7 @@ void sys__exit(int exitcode) {
 
   if (!alive) {
 
+    lock_acquire(p->lk);
     while (n > 0) {
       proc_destroy(array_get(p->children, n - 1));
       n--;
@@ -41,6 +42,7 @@ void sys__exit(int exitcode) {
     }
 
     array_destroy(p->children);
+    lock_release(p->lk);
     // DEBUG(DB_SYSCALL, "successfully destroyed children");
   }
   p->exitStatus = exitcode;
