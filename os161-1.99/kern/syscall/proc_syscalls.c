@@ -28,23 +28,25 @@ void sys__exit(int exitcode) {
   bool alive = false;
   int n = array_num(p->children);
   for (int i = 0; i < n; i++) {
-    alive = ((struct proc *) array_get(p->children, i))->alive || alive;
+    alive = ((struct resid *) array_get(p->children, i))->alive || alive;
   }
   lock_release(p->lk);
 
+  lock_acquire(p->lk);
   if (!alive) {
 
-    lock_acquire(p->lk);
     while (n > 0) {
+      // TODO(): change this to delete the info object instead...
       proc_destroy(array_get(p->children, n - 1));
       n--;
       array_setsize(p->children, n);
     }
 
     array_destroy(p->children);
-    lock_release(p->lk);
+
     // DEBUG(DB_SYSCALL, "successfully destroyed children");
   }
+  lock_release(p->lk);
   p->exitStatus = exitcode;
 #else
   exitcode = 0;
@@ -151,6 +153,12 @@ int sys_fork(struct trapframe *tf, pid_t *retval) {
 
   struct proc *child = proc_create_runprogram(curproc->p_name);
   KASSERT(child && child->pid);
+
+  struct resid *residual = kmalloc(sizeof(struct resid));
+  residual->ref = child;
+  residual->pid = pid;
+  residual->exitStatus = 0;
+  residual->alive = true;
   
   struct addrspace *as = as_create(); 
   KASSERT(as);
@@ -166,14 +174,14 @@ int sys_fork(struct trapframe *tf, pid_t *retval) {
   // lock_acquire(curproc->lk);
   child->parent = curproc;
 
-  array_add(curproc->children, child, NULL);
+  array_add(curproc->children, child->resid, NULL);
   // lock_release(curproc->lk);
 
   struct trapframe *temp= kmalloc(sizeof(struct trapframe));
   KASSERT(temp);
   *temp = *tf;
 
-  thread_fork(child->p_name, child, (void *) &enter_forked_process, temp, 15); 
+  thread_fork(child->p_name, child, &enter_forked_process, temp, 15); 
 
   *retval = child->pid;
 

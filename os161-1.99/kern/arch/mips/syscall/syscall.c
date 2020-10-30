@@ -185,11 +185,12 @@ syscall(struct trapframe *tf)
  *
  * Thus, you can trash it and do things another way if you prefer.
  */
-void enter_forked_process(struct trapframe *tf) {
+void enter_forked_process(void *tf, unsigned long data) {
 	// DEBUG(DB_SYSCALL,"enter_forked_process\n");
 	(void) tf;
+	(void) data;
 #if OPT_A2
-	struct trapframe temp = *tf;
+	struct trapframe temp = (struct trapframe *) *tf;
 
 	temp.tf_v0 = 0;
 	temp.tf_a3 = 0;
