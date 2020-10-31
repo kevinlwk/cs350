@@ -190,7 +190,7 @@ void enter_forked_process(void *tf, unsigned long data) {
 	(void) tf;
 	(void) data;
 #if OPT_A2
-	struct trapframe temp = (struct trapframe *) *tf;
+	struct trapframe temp = *((struct trapframe *) tf);
 
 	temp.tf_v0 = 0;
 	temp.tf_a3 = 0;

@@ -28,7 +28,7 @@ void sys__exit(int exitcode) {
   bool alive = false;
   int n = array_num(p->children);
   for (int i = 0; i < n; i++) {
-    alive = ((struct resid *) array_get(p->children, i))->alive || alive;
+    alive = ((struct proc *) array_get(p->children, i))->alive || alive;
   }
   lock_release(p->lk);
 
@@ -154,11 +154,11 @@ int sys_fork(struct trapframe *tf, pid_t *retval) {
   struct proc *child = proc_create_runprogram(curproc->p_name);
   KASSERT(child && child->pid);
 
-  struct resid *residual = kmalloc(sizeof(struct resid));
-  residual->ref = child;
-  residual->pid = pid;
-  residual->exitStatus = 0;
-  residual->alive = true;
+  // struct resid *residual = kmalloc(sizeof(struct resid));
+  // residual->ref = child;
+  // residual->pid = pid;
+  // residual->exitStatus = 0;
+  // residual->alive = true;
   
   struct addrspace *as = as_create(); 
   KASSERT(as);
@@ -174,7 +174,7 @@ int sys_fork(struct trapframe *tf, pid_t *retval) {
   // lock_acquire(curproc->lk);
   child->parent = curproc;
 
-  array_add(curproc->children, child->resid, NULL);
+  array_add(curproc->children, child, NULL);
   // lock_release(curproc->lk);
 
   struct trapframe *temp= kmalloc(sizeof(struct trapframe));

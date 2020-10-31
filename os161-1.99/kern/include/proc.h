@@ -47,14 +47,13 @@ struct semaphore;
 #endif // UW
 
 // suggested by ryan
-#if OPT_A2
-struct resid {
-	struct proc *ref;
-	pid_t pid;
-	volatile int exitStatus;
-	volatile bool alive;
-};
-#endif
+// #if OPT_A2
+// struct resid {
+// 	struct proc *ref;
+// 	pid_t pid;
+
+// };
+// #endif
 
 /*
  * Process structure.
@@ -76,6 +75,8 @@ struct proc {
 		struct cv* cv;
 		struct array *children;
 		struct lock *lk;
+		volatile int exitStatus;
+		volatile bool alive;
     #endif
 
 #ifdef UW
