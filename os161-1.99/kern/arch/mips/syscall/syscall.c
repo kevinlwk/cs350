@@ -116,7 +116,7 @@ syscall(struct trapframe *tf)
 			  (int *)(&retval));
 	  break;
 	case SYS__exit:
-	  kprintf("sys__exit\n");
+	//   kprintf("sys__exit\n");
 	  sys__exit((int)tf->tf_a0);
 	  /* sys__exit does not return, execution should not get here */
 	  panic("unexpected return from sys__exit");
@@ -126,7 +126,7 @@ syscall(struct trapframe *tf)
 	  err = sys_getpid((pid_t *)&retval);
 	  break;
 	case SYS_waitpid:
-	  kprintf("sys__waitpid\n");
+	//   kprintf("sys__waitpid\n");
 	  err = sys_waitpid((pid_t)tf->tf_a0,
 			    (userptr_t)tf->tf_a1,
 			    (int)tf->tf_a2,
@@ -137,7 +137,7 @@ syscall(struct trapframe *tf)
 	    /* Add stuff here */
 #ifdef OPT_A2
 	case SYS_fork:
-		kprintf("sys_fork\n");
+		// kprintf("sys_fork\n");
 		err = sys_fork(tf, (pid_t *)&retval);
 	break;
 #endif

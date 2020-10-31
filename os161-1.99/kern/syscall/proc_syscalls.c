@@ -15,18 +15,21 @@
 #include "opt-A2.h"
 
 void sys__exit(int exitcode) {
-  DEBUG(DB_SYSCALL,"sys__exit: (%d)\n", exitcode);
+  // DEBUG(DB_SYSCALL,"sys__exit: (%d)\n", exitcode);
 
   struct addrspace *as;
   struct proc *p = curproc;
 
-#if OPT_A2 
+#if OPT_A2
+  // we're checking if any other children are still alive before we destroy everything
+  // note: the suggestion to move pid, alive, and exitStatus to another object was too hard to figure out
   p->alive = false;
 
   lock_acquire(p->lk);
   cv_signal(p->cv, p->lk);
   bool alive = false;
   int n = array_num(p->children);
+
   for (int i = 0; i < n; i++) {
     alive = ((struct proc *) array_get(p->children, i))->alive || alive;
   }
@@ -36,15 +39,12 @@ void sys__exit(int exitcode) {
   if (!alive) {
 
     while (n > 0) {
-      // TODO(): change this to delete the info object instead...
       proc_destroy(array_get(p->children, n - 1));
       n--;
       array_setsize(p->children, n);
     }
 
     array_destroy(p->children);
-
-    // DEBUG(DB_SYSCALL, "successfully destroyed children");
   }
   lock_release(p->lk);
   p->exitStatus = exitcode;
@@ -89,7 +89,6 @@ void sys__exit(int exitcode) {
 int
 sys_getpid(pid_t *retval)
 {
-  // DEBUG(DB_SYSCALL,"sys_getpid: (%d)\n", *retval);
   /* for now, this is just a stub that always returns a PID of 1 */
   /* you need to fix this to make it work properly */
   #if OPT_A2
@@ -108,7 +107,6 @@ sys_waitpid(pid_t pid,
 	    int options,
 	    pid_t *retval)
 {
-  // DEBUG(DB_SYSCALL,"sys_waitpid: (%d)\n", *retval);
   int exitstatus;
   int result;
 
@@ -150,39 +148,31 @@ sys_waitpid(pid_t pid,
 
 #if OPT_A2
 int sys_fork(struct trapframe *tf, pid_t *retval) {
-
-  struct proc *child = proc_create_runprogram(curproc->p_name);
-  KASSERT(child && child->pid);
-
-  // struct resid *residual = kmalloc(sizeof(struct resid));
-  // residual->ref = child;
-  // residual->pid = pid;
-  // residual->exitStatus = 0;
-  // residual->alive = true;
-  
-  struct addrspace *as = as_create(); 
-  KASSERT(as);
-
-  // lock_acquire(curproc->lk);
-  // as_copy(curproc->p_addrspace, &as);
-  if (as_copy(curproc->p_addrspace, &as) != 0) {
-    return ENOMEM;
-  }
-  child->p_addrspace = as; 
-  // lock_release(curproc->lk);
- 
-  // lock_acquire(curproc->lk);
-  child->parent = curproc;
-
-  array_add(curproc->children, child, NULL);
-  // lock_release(curproc->lk);
+  // postmortem:
+  // apparently the reason why my onefork worked and my widefork didn't
+  // was the result of me not allocating enough ram...
+  // 50 hours and lots of consultations through discord and piazza were had
+  // thanks guys I appreciate it though
 
   struct trapframe *temp= kmalloc(sizeof(struct trapframe));
   KASSERT(temp);
   *temp = *tf;
 
-  thread_fork(child->p_name, child, &enter_forked_process, temp, 15); 
+  struct proc *child = proc_create_runprogram(curproc->p_name);
+  KASSERT(child && child->pid);
+  
+  struct addrspace *as = as_create(); 
+  KASSERT(as);
 
+  if (as_copy(curproc->p_addrspace, &as) != 0) {
+    return ENOMEM;
+  }
+  child->p_addrspace = as; 
+  child->parent = curproc;
+
+  array_add(curproc->children, child, NULL);
+
+  thread_fork(child->p_name, child, &enter_forked_process, temp, 15); 
   *retval = child->pid;
 
   return 0;
