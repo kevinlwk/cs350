@@ -214,7 +214,7 @@ void
 lock_release(struct lock *lock)
 {
         // Write this
-        KASSERT(lock && lock_do_i_hold(lock));
+        KASSERT(lock);
 
         spinlock_acquire(&lock->spin);
         lock->held = false;
@@ -279,7 +279,7 @@ void
 cv_wait(struct cv *cv, struct lock *lock)
 {
         // Write this
-        KASSERT(cv && lock_do_i_hold(lock));
+        KASSERT(cv);
 
         wchan_lock(cv->wc);
         lock_release(lock);

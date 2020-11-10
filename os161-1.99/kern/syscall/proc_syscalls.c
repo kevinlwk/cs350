@@ -9,17 +9,49 @@
 #include <thread.h>
 #include <addrspace.h>
 #include <copyinout.h>
-
-  /* this implementation of sys__exit does not do anything with the exit code */
-  /* this needs to be fixed to get exit() and waitpid() working properly */
+#include <mips/trapframe.h>
+#include "array.h"
+#include "synch.h"
+#include "opt-A2.h"
 
 void sys__exit(int exitcode) {
+  // DEBUG(DB_SYSCALL,"sys__exit: (%d)\n", exitcode);
 
   struct addrspace *as;
   struct proc *p = curproc;
-  /* for now, just include this to keep the compiler from complaining about
-     an unused variable */
-  (void)exitcode;
+
+#if OPT_A2
+  // we're checking if any other children are still alive before we destroy everything
+  // note: the suggestion to move pid, alive, and exitStatus to another object was too hard to figure out
+  p->alive = false;
+
+  lock_acquire(p->lk);
+  cv_signal(p->cv, p->lk);
+  bool alive = false;
+  int n = array_num(p->children);
+
+  for (int i = 0; i < n; i++) {
+    alive = ((struct proc *) array_get(p->children, i))->alive || alive;
+  }
+  lock_release(p->lk);
+
+  lock_acquire(p->lk);
+  if (!alive) {
+
+    while (n > 0) {
+      proc_destroy(array_get(p->children, n - 1));
+      n--;
+      array_setsize(p->children, n);
+    }
+
+    array_destroy(p->children);
+  }
+  lock_release(p->lk);
+  p->exitStatus = exitcode;
+#else
+  exitcode = 0;
+#endif
+
 
   DEBUG(DB_SYSCALL,"Syscall: _exit(%d)\n",exitcode);
 
@@ -41,7 +73,11 @@ void sys__exit(int exitcode) {
 
   /* if this is the last user process in the system, proc_destroy()
      will wake up the kernel menu thread */
+#if OPT_A2 
+  if (!(p->parent && p->parent->alive)) proc_destroy(p);
+#else
   proc_destroy(p);
+#endif
   
   thread_exit();
   /* thread_exit() does not return, so we should never get here */
@@ -55,7 +91,11 @@ sys_getpid(pid_t *retval)
 {
   /* for now, this is just a stub that always returns a PID of 1 */
   /* you need to fix this to make it work properly */
-  *retval = 1;
+  #if OPT_A2
+    *retval = curproc->pid;
+  #else
+    *retval = 1;
+  #endif
   return(0);
 }
 
@@ -70,20 +110,33 @@ sys_waitpid(pid_t pid,
   int exitstatus;
   int result;
 
-  /* this is just a stub implementation that always reports an
-     exit status of 0, regardless of the actual exit status of
-     the specified process.   
-     In fact, this will return 0 even if the specified process
-     is still running, and even if it never existed in the first place.
-
-     Fix this!
-  */
-
   if (options != 0) {
     return(EINVAL);
   }
-  /* for now, just pretend the exitstatus is 0 */
-  exitstatus = 0;
+
+  #if OPT_A2
+
+    struct proc *p = curproc;
+
+    lock_acquire(p->lk);
+    int n = array_num(p->children);
+
+    for (int i = 0; i < n; i++) {
+      struct proc *child = array_get(p->children, i);
+
+      if (child->pid == pid) {
+        while (child->alive) cv_wait(child->cv, child->lk);
+        exitstatus = _MKWAIT_EXIT(child->exitStatus);
+        proc_destroy(child);
+      }
+    }
+
+    lock_release(p->lk);
+
+  #else
+    exitstatus = 0;
+  #endif
+
   result = copyout((void *)&exitstatus,status,sizeof(int));
   if (result) {
     return(result);
@@ -92,3 +145,36 @@ sys_waitpid(pid_t pid,
   return(0);
 }
 
+
+#if OPT_A2
+int sys_fork(struct trapframe *tf, pid_t *retval) {
+  // postmortem:
+  // apparently the reason why my onefork worked and my widefork didn't
+  // was the result of me not allocating enough ram...
+  // 50 hours and lots of consultations through discord and piazza were had
+  // thanks guys I appreciate it though
+
+  struct trapframe *temp= kmalloc(sizeof(struct trapframe));
+  KASSERT(temp);
+  *temp = *tf;
+
+  struct proc *child = proc_create_runprogram(curproc->p_name);
+  KASSERT(child && child->pid);
+  
+  struct addrspace *as = as_create(); 
+  KASSERT(as);
+
+  if (as_copy(curproc->p_addrspace, &as) != 0) {
+    return ENOMEM;
+  }
+  child->p_addrspace = as; 
+  child->parent = curproc;
+
+  array_add(curproc->children, child, NULL);
+
+  thread_fork(child->p_name, child, &enter_forked_process, temp, 15); 
+  *retval = child->pid;
+
+  return 0;
+}
+#endif
