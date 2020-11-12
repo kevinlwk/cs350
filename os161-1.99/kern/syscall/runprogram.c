@@ -54,7 +54,11 @@
  * Calls vfs_open on progname and thus may destroy it.
  */
 int
+#if OPT_A2
 runprogram(char *progname, int argc, char** argv)
+# else
+runprogram(char *progname)
+#endif
 {
 	struct addrspace *as;
 	struct vnode *v;
