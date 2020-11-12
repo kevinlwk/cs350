@@ -140,6 +140,9 @@ syscall(struct trapframe *tf)
 		// kprintf("sys_fork\n");
 		err = sys_fork(tf, (pid_t *)&retval);
 	break;
+	case SYS_execv:
+		err = sys_execv((userptr_t) tf->tf_a0, (char **) tf->tf_a1);
+		break;
 #endif
  
 	default:

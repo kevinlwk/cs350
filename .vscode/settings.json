@@ -1,7 +1,10 @@
 {
     "files.associations": {
+        "*.sqc": "c",
         "typeinfo": "c",
         "limits": "c",
-        "array": "cpp"
+        "array": "cpp",
+        "chrono": "c",
+        "algorithm": "c"
     }
 }
