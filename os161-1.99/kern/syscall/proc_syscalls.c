@@ -10,6 +10,9 @@
 #include <addrspace.h>
 #include <copyinout.h>
 #include <mips/trapframe.h>
+#include <vfs.h>
+#include <limits.h>
+#include <kern/fcntl.h>
 #include "array.h"
 #include "synch.h"
 #include "opt-A2.h"
@@ -153,6 +156,7 @@ int sys_fork(struct trapframe *tf, pid_t *retval) {
   // was the result of me not allocating enough ram...
   // 50 hours and lots of consultations through discord and piazza were had
   // thanks guys I appreciate it though
+  // UPDATE: i got 50% on my previous thing because of some issue with my lock_do_i_hold... really tragic
 
   struct trapframe *temp= kmalloc(sizeof(struct trapframe));
   KASSERT(temp);
@@ -177,4 +181,103 @@ int sys_fork(struct trapframe *tf, pid_t *retval) {
 
   return 0;
 }
+
+int sys_execv(userptr_t progname, char **args) {
+  struct addrspace *as;
+	struct vnode *v;
+	vaddr_t entrypoint, stackptr;
+	int result;
+
+  int argc = 0;
+  while (args[argc]) argc++;
+
+  size_t allocSize = sizeof(char*) * (argc + 1);
+  size_t actual;
+  size_t len;
+
+  char** argv = kmalloc(allocSize);
+
+  argv[argc] = NULL;
+  for (int i = 0; i < argc; i++) {
+    len = strlen(args[i]) + 1;
+    argv[i] = kmalloc(len * sizeof(char));
+    result = copyinstr((userptr_t) args[i], argv[i], len, &actual);
+    if (result) {
+      return result;
+    }
+  }
+
+	/* Open the file. */
+	result = vfs_open((char *) progname, O_RDONLY, 0, &v);
+	if (result) {
+		return result;
+	}
+
+	/* We should be a new process. */
+	// KASSERT(curproc_getas() == NULL);
+
+	/* Create a new address space. */
+	as = as_create();
+	if (as ==NULL) {
+		vfs_close(v);
+		return ENOMEM;
+	}
+
+	/* Switch to it and activate it. */
+	curproc_setas(as);
+	as_activate();
+
+	/* Load the executable. */
+	result = load_elf(v, &entrypoint);
+	if (result) {
+		/* p_addrspace will go away when curproc is destroyed */
+		vfs_close(v);
+		return result;
+	}
+
+	/* Done with the file now. */
+	vfs_close(v);
+
+	/* Define the user stack in the address space */
+	result = as_define_stack(as, &stackptr);
+	if (result) {
+		/* p_addrspace will go away when curproc is destroyed */
+		return result;
+	}
+
+	vaddr_t *stackptrs = kmalloc(allocSize);
+
+	for (int i = 0; i <= argc; i++) {
+		if (i == argc) {
+			stackptrs[i] = (vaddr_t)NULL;
+			stackptr = ROUNDUP(stackptr, 8) - allocSize - 2 * sizeof(char *);
+			break;
+		}
+		size_t len = strlen(argv[i]) + 1;
+		userptr_t newStackptr = (userptr_t) stackptr - len;
+		int err = copyout(argv[i], newStackptr, len);
+		KASSERT(!err);
+		stackptrs[i] = (int) newStackptr;
+		stackptr = stackptrs[i];
+	}
+
+	for (int i = 0; i <= argc; i++) {
+		int err = copyout(&stackptrs[i], (userptr_t) stackptr + 4 * i, 4);
+		KASSERT(!err);
+	}
+
+  for (int i = 0; i < argc; i++) kfree(argv[i]);
+  kfree(argv);
+  kfree(stackptrs);
+
+	/* Warp to user mode. */
+	enter_new_process(argc /*argc*/, (userptr_t) stackptr /*userspace addr of argv*/,
+			  stackptr, entrypoint);
+	
+	/* enter_new_process does not return. */
+	panic("enter_new_process returned\n");
+	return EINVAL;
+
+}
+
 #endif
