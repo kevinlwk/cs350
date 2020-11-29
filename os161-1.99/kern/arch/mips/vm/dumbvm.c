@@ -121,7 +121,9 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	switch (faulttype) {
 	    case VM_FAULT_READONLY:
 		/* We always create pages read-write, so we can't get this */
-		panic("dumbvm: got VM_FAULT_READONLY\n");
+		return EFAULT;
+		// panic("dumbvm: got VM_FAULT_READONLY\n");
+		break;
 	    case VM_FAULT_READ:
 	    case VM_FAULT_WRITE:
 		break;
@@ -200,9 +202,17 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		return 0;
 	}
 
-	kprintf("dumbvm: Ran out of TLB entries - cannot handle page fault\n");
+	ehi = faultaddress;
+	elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
+	if (as->isLoadElfDone && paddr == (faultaddress - vbase1) + as->as_pbase1) {
+		elo &= ~TLBLO_DIRTY;
+		as_activate();
+	}
+	tlb_random(ehi, elo);
+
+	// kprintf("dumbvm: Ran out of TLB entries - cannot handle page fault\n");
 	splx(spl);
-	return EFAULT;
+	return 0;
 }
 
 struct addrspace *
@@ -220,6 +230,7 @@ as_create(void)
 	as->as_pbase2 = 0;
 	as->as_npages2 = 0;
 	as->as_stackpbase = 0;
+	as->isLoadElfDone = false;
 
 	return as;
 }
