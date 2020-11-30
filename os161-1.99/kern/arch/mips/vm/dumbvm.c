@@ -57,7 +57,6 @@ static struct spinlock coremap_lock = SPINLOCK_INITIALIZER;
 struct coremap {
 	paddr_t begin;
 	paddr_t end;
-	size_t size;
 	bool bootstrapped;
 };
 
@@ -69,12 +68,11 @@ vm_bootstrap(void)
 {
 #if OPT_A3
 	ram_getsize(&(cm.begin), &(cm.end));
-	cm.size = (cm.end - cm.begin) / PAGE_SIZE;
 
 	int *kvAddress = (int *) PADDR_TO_KVADDR(cm.begin);
 	cm.bootstrapped = true;
 
-	for (size_t i = 0; i < cm.size; i++) kvAddress = 0;
+	for (size_t i = 0; i < (cm.end - cm.begin) / PAGE_SIZE; i++) kvAddress = 0;
 
 #endif
 }
@@ -98,12 +96,12 @@ getppages(unsigned long npages)
 	int *kvAddress = (int*) PADDR_TO_KVADDR(cm.begin);
 	size_t probe;
 
-	for (size_t i = 0; i < cm.size; i++) {
+	for (size_t i = 0; i < (cm.end - cm.begin) / PAGE_SIZE; i++) {
 		probe = i;
 
 		int pageEnd = i;
 
-		for (size_t p = 1; probe + p < cm.size && kvAddress[pageEnd] == 0; p++, pageEnd++) {
+		for (size_t p = 1; probe + p < (cm.end - cm.begin) / PAGE_SIZE && kvAddress[pageEnd] == 0; p++, pageEnd++) {
 			if (p != npages) continue;
 			int foundAdd = cm.begin + probe * PAGE_SIZE;
 			for (size_t k = 0; k < npages; k++, i++) kvAddress[i] = (int) k + 1;
@@ -142,7 +140,7 @@ free_kpages(vaddr_t addr)
 	int *kvAddress = (int*) PADDR_TO_KVADDR(cm.begin);
 
     size_t pageRegion = (p_addr - cm.begin - PAGE_SIZE) / PAGE_SIZE;
-    KASSERT(pageRegion < cm.size);
+    KASSERT(pageRegion < (cm.end - cm.begin) / PAGE_SIZE);
 
     kvAddress[pageRegion] = 0;
 	for (int i = pageRegion + 1; kvAddress[i] > 1; i++) {
