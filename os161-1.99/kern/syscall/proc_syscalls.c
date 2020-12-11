@@ -151,12 +151,6 @@ sys_waitpid(pid_t pid,
 
 #if OPT_A2
 int sys_fork(struct trapframe *tf, pid_t *retval) {
-  // postmortem:
-  // apparently the reason why my onefork worked and my widefork didn't
-  // was the result of me not allocating enough ram...
-  // 50 hours and lots of consultations through discord and piazza were had
-  // thanks guys I appreciate it though
-  // UPDATE: i got 50% on my previous thing because of some issue with my lock_do_i_hold... really tragic
 
   struct trapframe *temp= kmalloc(sizeof(struct trapframe));
   KASSERT(temp);
@@ -219,6 +213,7 @@ int sys_execv(userptr_t progname, char **args) {
 	/* Create a new address space. */
 	as = as_create();
 	if (as ==NULL) {
+    kfree(argv);
 		vfs_close(v);
 		return ENOMEM;
 	}
@@ -230,6 +225,7 @@ int sys_execv(userptr_t progname, char **args) {
 	/* Load the executable. */
 	result = load_elf(v, &entrypoint);
 	if (result) {
+    kfree(argv);
 		/* p_addrspace will go away when curproc is destroyed */
 		vfs_close(v);
 		return result;
@@ -241,6 +237,7 @@ int sys_execv(userptr_t progname, char **args) {
 	/* Define the user stack in the address space */
 	result = as_define_stack(as, &stackptr);
 	if (result) {
+    kfree(argv);
 		/* p_addrspace will go away when curproc is destroyed */
 		return result;
 	}
@@ -265,7 +262,6 @@ int sys_execv(userptr_t progname, char **args) {
 		int err = copyout(&stackptrs[i], (userptr_t) stackptr + 4 * i, 4);
 		KASSERT(!err);
 	}
-
   for (int i = 0; i < argc; i++) kfree(argv[i]);
   kfree(argv);
   kfree(stackptrs);
